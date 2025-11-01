@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PBL 交互病例（问到才给）</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Noto Sans CJK SC", Arial, "Microsoft YaHei", sans-serif; background:#f6f7fb; margin:0; }
+    .wrap { max-width: 900px; margin: 20px auto; padding: 16px; }
+    .card { background:#fff; border-radius:14px; padding:16px; box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+    .chat { height: 60vh; overflow-y:auto; padding-right:8px; }
+    .msg { margin:10px 0; display:flex; }
+    .msg .bubble { border-radius: 14px; padding:10px 14px; max-width: 80%; white-space:pre-wrap; }
+    .me { justify-content:flex-end; }
+    .me .bubble { background:#e8f0fe; }
+    .bot .bubble { background:#fff; border:1px solid #eef0f4; }
+    .hint { font-size:12px; color:#999; margin-top:6px; }
+    .controls { display:flex; gap:8px; margin-top:10px; }
+    .controls input { flex:1; padding:10px 12px; border:1px solid #d9dce3; border-radius: 10px; }
+    .controls button { padding:10px 16px; border-radius:10px; border:0; background:#1a73e8; color:#fff; }
+    .title { margin:8px 0 16px; display:flex; align-items:end; justify-content:space-between; }
+    .title .right small { color:#667; }
+    .pill { display:inline-block; font-size:12px; background:#eef3ff; color:#335; padding:3px 8px; border-radius:999px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">
+      <h2>PBL 交互病例（问什么答什么）</h2>
+      <div class="right">
+        <span class="pill" id="casepill"></span>
+        <small>路由：/case/1, /case/2, /case/3</small>
+      </div>
+    </div>
+    <div class="card">
+      <div id="chat" class="chat"></div>
+      <div class="controls">
+        <input id="q" placeholder="请输入你的问题，例如：什么时候开始痛？" />
+        <button id="send">发送</button>
+      </div>
+      <div class="hint">说明：系统只在你问到时才给相应信息；未命中将只回复“无相关新信息。”</div>
+    </div>
+  </div>
+
+<script>
+const chat = document.getElementById('chat')
+const q = document.getElementById('q')
+const send = document.getElementById('send')
+
+const params = new URLSearchParams(location.search)
+const pathCase = location.pathname.split('/').filter(Boolean).pop()
+let caseId = params.get('case') || (['1','2','3'].includes(pathCase) ? pathCase : '1')
+document.getElementById('casepill').textContent = `当前案例：${caseId}`
+
+const state = { revealed: [] }
+
+function render(role, text){
+  const row = document.createElement('div')
+  row.className = 'msg ' + (role === 'me' ? 'me' : 'bot')
+  const bubble = document.createElement('div')
+  bubble.className = 'bubble'
+  bubble.textContent = text
+  row.appendChild(bubble)
+  chat.appendChild(row)
+  chat.scrollTop = chat.scrollHeight
+}
+
+async function bootstrap(){
+  const res = await fetch(`/bootstrap?case_id=${caseId}`)
+  const data = await res.json()
+  if (data?.initial){
+    render('bot', data.initial.content) // e.g., 1: “胸痛。” 2: “呼吸困难。” 3: “术后出现心悸、胸闷。”
+    state.revealed.push(data.initial.id)
+  } else {
+    render('bot', '（无初始提示）')
+  }
+}
+bootstrap()
+
+send.onclick = async ()=>{
+  const text = q.value.trim()
+  if (!text) return
+  render('me', text)
+  q.value = ''
+  const resp = await fetch('/ask', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ case_id: caseId, question: text, revealed_ids: state.revealed })
+  }).then(r=>r.json())
+  if (resp.nohit){
+    render('bot', '无相关新信息。')
+    return
+  }
+  for (const b of resp.reply_blocks){
+    render('bot', `【${b.title}】\n${b.content}`)
+    state.revealed.push(b.id)
+  }
+}
+
+q.addEventListener('keydown', e => { if (e.key === 'Enter') send.click() })
+</script>
+</body>
+</html>
