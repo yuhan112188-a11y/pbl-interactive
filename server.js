@@ -20,25 +20,26 @@ const CARDS = JSON.parse(fs.readFileSync(path.join(__dirname, 'data', 'case_card
 app.get('/health', (req,res)=>res.json({ok:true}))
 
 // Embedding function
-async function getEmbedding(text){
-  const url = `${process.env.EMBED_BASE_URL || 'https://api.deepseek.com/v1'}/embeddings`
+async function getEmbedding(text) {
+  const url = `${process.env.EMBED_BASE_URL}/embeddings`;  // 确保没有/v1
   const res = await fetch(url, {
-    method:'POST',
-    headers:{
+    method: 'POST',
+    headers: {
       'Authorization': `Bearer ${process.env.DS_API_KEY}`,
-      'Content-Type':'application/json'
+      'Content-Type': 'application/json',
     },
     body: JSON.stringify({
       input: text,
-      model: process.env.EMBED_MODEL || 'deepseek-embedding-2'
-    })
-  })
-  if (!res.ok){
-    const body = await res.text()
-    throw new Error(`Embedding API error ${res.status}: ${body}`)
+      model: process.env.EMBED_MODEL || 'deepseek-v3.2-exp',  // 使用 v3.2-exp 模型
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Embedding API error ${res.status}: ${body}`);
   }
-  const data = await res.json()
-  return data.data?.[0]?.embedding || data.embedding || data.vector
+  const data = await res.json();
+  return data.data?.[0]?.embedding || data.embedding || data.vector;
 }
 
 function norm(v){ return Math.sqrt(v.reduce((s,x)=>s + x*x, 0)) || 1 }
